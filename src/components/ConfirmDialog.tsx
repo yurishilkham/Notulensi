@@ -7,10 +7,6 @@ type Props = {
   confirmLabel: string;
   onConfirm: () => void;
   onClose: () => void;
-  secondaryLabel?: string;
-  onSecondary?: () => void;
-  confirmVariant?: "danger" | "primary";
-  autoFocus?: "confirm" | "cancel";
 };
 
 export function ConfirmDialog({
@@ -20,14 +16,9 @@ export function ConfirmDialog({
   confirmLabel,
   onConfirm,
   onClose,
-  secondaryLabel,
-  onSecondary,
-  confirmVariant = "danger",
-  autoFocus = "cancel",
 }: Props) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
-  const confirmRef = useRef<HTMLButtonElement>(null);
   const titleId = useId();
   const descriptionId = useId();
 
@@ -36,12 +27,10 @@ export function ConfirmDialog({
     if (!dialog) return;
     if (open && !dialog.open) {
       dialog.showModal();
-      const target =
-        autoFocus === "confirm" ? confirmRef.current : cancelRef.current;
-      target?.focus();
+      cancelRef.current?.focus();
     }
     if (!open && dialog.open) dialog.close();
-  }, [open, autoFocus]);
+  }, [open]);
 
   return (
     <dialog
@@ -65,9 +54,7 @@ export function ConfirmDialog({
         <p className="confirm-description" id={descriptionId}>
           {description}
         </p>
-        <div
-          className={`confirm-actions${secondaryLabel ? " confirm-actions--three" : ""}`}
-        >
+        <div className="confirm-actions">
           <button
             ref={cancelRef}
             type="button"
@@ -76,19 +63,9 @@ export function ConfirmDialog({
           >
             Batal
           </button>
-          {secondaryLabel && onSecondary && (
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={onSecondary}
-            >
-              {secondaryLabel}
-            </button>
-          )}
           <button
-            ref={confirmRef}
             type="button"
-            className={`btn ${confirmVariant === "primary" ? "btn-primary" : "btn-danger"}`}
+            className="btn btn-danger"
             onClick={onConfirm}
           >
             {confirmLabel}

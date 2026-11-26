@@ -1,6 +1,6 @@
 # Notulensi Bawaslu Kota Pasuruan
 
-Aplikasi web untuk menyusun notulensi kegiatan Bawaslu Kota Pasuruan. Isi formulir, periksa pratinjau A4 atau F4, lalu cetak atau simpan PDF. Data tersimpan di peramban, tanpa server dan tanpa akun.
+Aplikasi web untuk menyusun notulensi kegiatan Bawaslu Kota Pasuruan. Isi formulir, periksa pratinjau A4 atau F4, lalu cetak atau simpan PDF. Data tersimpan otomatis di peramban, tanpa server dan tanpa akun.
 
 ## Fitur
 
@@ -8,8 +8,7 @@ Aplikasi web untuk menyusun notulensi kegiatan Bawaslu Kota Pasuruan. Isi formul
 - Pratinjau kertas **A4** dan **F4** yang berubah saat formulir diisi.
 - Cetak atau simpan PDF lewat dialog cetak peramban dengan kop surat, logo, daftar isian, dan blok tanda tangan.
 - Daftar beberapa notulensi, ganti dokumen aktif, hapus, dan urungkan hapus.
-- Tombol **Simpan** untuk menulis notulensi baru dan setiap perubahan ke `localStorage`. Tidak ada autosave.
-- Peringatan **Simpan / Buang / Batal** saat membuat notulensi baru atau berpindah dokumen dengan perubahan yang belum disimpan.
+- Penyimpanan otomatis ke `localStorage` setiap ada perubahan, dengan status simpan di header.
 - Tata letak desktop dan ponsel, termasuk tab Formulir/Pratinjau dan bilah aksi bawah.
 - Hasil build berupa satu file `dist/index.html` yang bisa dibuka langsung tanpa server.
 
@@ -41,7 +40,7 @@ npm run preview
 
 1. Klik **Notulensi baru** di sidebar, atau tombol **+** di ponsel.
 2. Isi bagian A (agenda), B (peserta), C (pokok pembahasan), D (tindak lanjut), E (dokumentasi kegiatan / foto), dan F (tanda tangan).
-3. Klik **Simpan** di header (di ponsel, tombol **Simpan** ada di bilah bawah) setiap kali selesai mengubah isian, agar notulensi masuk ke daftar **Dokumen tersimpan**.
+3. Perubahan tersimpan otomatis di peramban ini dan langsung masuk ke daftar **Dokumen tersimpan**.
 4. Periksa hasilnya di panel **Pratinjau dokumen** dan pilih ukuran kertas **A4** atau **F4**. Di ponsel, buka tab **Pratinjau**.
 5. Klik **Cetak / PDF** untuk membuka dialog cetak peramban, lalu pilih **Save as PDF** atau **Microsoft Print to PDF**.
 6. Untuk arsip, simpan file PDF. Data di peramban bisa terhapus jika data situs dibersihkan.
@@ -58,9 +57,10 @@ Catatan pengisian:
 
 - Kunci utama: `notulensi-bawaslu-v1`.
 - Kunci cadangan: `notulensi-bawaslu-v1-cadangan`.
-- Notulensi baru dan setiap perubahan belum masuk peramban sampai klik **Simpan**. Tidak ada penyimpanan otomatis.
-- Jika membuat notulensi baru atau membuka dokumen lain saat masih ada perubahan yang belum disimpan, aplikasi menanyakan **Simpan**, **Buang**, atau **Batal**.
-- Status di header menunjukkan **Tersimpan**, **Belum tersimpan**, atau **Gagal menyimpan**.
+- Notulensi baru masuk daftar setelah perubahan pertama, lalu setiap perubahan berikutnya disimpan otomatis sekitar 450 ms setelah mengetik.
+- Perubahan juga disimpan saat berpindah dokumen, mencetak, menutup halaman, atau menyembunyikan tab.
+- Status di header menunjukkan **Menyimpan...**, **Tersimpan**, **Belum tersimpan**, atau **Gagal menyimpan**.
+- Mengubah ukuran kertas pada draft baru yang belum punya isian tidak membuat draft kosong. Perubahan kertas ikut tersimpan setelah ada isian lain atau saat draft sudah tersimpan.
 - Data terikat pada browser dan alamat tempat aplikasi dibuka. Membuka `dist/index.html` dari lokasi file yang berbeda dapat memakai penyimpanan yang berbeda. Untuk pemakaian rutin, gunakan alamat dev atau preview yang tetap.
 - Jika data tersimpan rusak, aplikasi menampilkan pemberitahuan, mematikan penyimpanan agar data lama tidak tertimpa, dan menyediakan tombol **Mulai penyimpanan baru**. Data lama disalin ke kunci cadangan sebelum kunci utama dibersihkan. Jika pencadangan gagal, reset dibatalkan dan data lama tetap utuh.
 - Mode privat atau pengaturan browser yang memblokir penyimpanan dapat membuat penyimpanan tidak tersedia. Dokumen tetap bisa diisi, diunduh, dan dicetak.
@@ -77,7 +77,7 @@ Template asli berukuran Letter. Aplikasi menyediakan A4 dan F4 karena ukuran itu
 npm run verify
 ```
 
-Perintah ini membangun aplikasi, menjalankan server pratinjau sementara, lalu menguji `dist/index.html` di Microsoft Edge headless. Pemeriksaan mencakup simpan manual dan peringatan perubahan belum tersimpan, tidak ada autosave, muat ulang, ganti dokumen, hapus dan urungkan, Escape pada dialog, urutan Tab dan fokus keyboard, PDF A4 dan F4 dengan tanda tangan utuh, tombol cetak, pengujian ponsel 390 px tanpa overflow, tab dan drawer ponsel, data rusak, serta kegagalan tulis penyimpanan. Tangkapan layar dan PDF hasil uji ditulis ke folder `shots/`.
+Perintah ini membangun aplikasi, menjalankan server pratinjau sementara, lalu menguji `dist/index.html` di Microsoft Edge headless. Pemeriksaan mencakup autosave, muat ulang, ganti dokumen, hapus dan urungkan, Escape pada dialog, urutan Tab dan fokus keyboard, PDF A4 dan F4 dengan tanda tangan utuh, tombol cetak, pengujian ponsel 390 px tanpa overflow, tab dan drawer ponsel, data rusak, serta kegagalan tulis penyimpanan. Tangkapan layar dan PDF hasil uji ditulis ke folder `shots/`.
 
 Jika Edge tidak ada di `C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe`, ubah konstanta `EDGE` di bagian atas `scripts/verify.mjs`.
 
@@ -85,7 +85,7 @@ Jika Edge tidak ada di `C:\Program Files (x86)\Microsoft\Edge\Application\msedge
 
 ```text
 src/
-  App.tsx                      keadaan aplikasi, simpan manual, cetak PDF
+  App.tsx                      keadaan aplikasi, autosave, cetak PDF
   types.ts                     definisi tipe dokumen, ukuran kertas, status
   components/
     AppHeader.tsx              header, status simpan, tombol Cetak / PDF

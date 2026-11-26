@@ -254,6 +254,10 @@ ol {
   display: none;
 }
 
+.save-status--saving {
+  color: var(--ink);
+}
+
 .save-status--error {
   color: var(--red);
   font-weight: 600;
@@ -1553,7 +1557,7 @@ dialog::backdrop {
     left: 0;
     z-index: 50;
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr;
     gap: 10px;
     padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
     background: var(--surface);
@@ -1677,15 +1681,6 @@ dialog::backdrop {
 
   .confirm-actions .btn {
     flex: 1;
-  }
-
-  .confirm-actions--three {
-    flex-direction: column-reverse;
-  }
-
-  .confirm-actions--three .btn {
-    flex: none;
-    width: 100%;
   }
 
   .toast {

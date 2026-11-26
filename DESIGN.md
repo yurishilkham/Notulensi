@@ -37,14 +37,14 @@ Aplikasi ini adalah meja kerja dokumen, bukan halaman pemasaran. Pengguna datang
 
 ## Ikon
 
-Ikon dibuat sendiri dengan garis 1,8 px: plus, simpan, tempat sampah, printer, unduh, tutup, dan centang. Semuanya menunjukkan aksi yang benar-benar ada. Tidak ada ikon hiasan, sparkle, atau ilustrasi.
+Ikon dibuat sendiri dengan garis 1,8 px: plus, tempat sampah, printer, unduh, tutup, dan centang. Semuanya menunjukkan aksi yang benar-benar ada. Tidak ada ikon hiasan, sparkle, atau ilustrasi.
 
 ## Keadaan
 
 - Kosong: dokumen menampilkan titik-titik pada kolom yang belum diisi, dan daftar dokumen menjelaskan bahwa belum ada arsip.
-- Belum tersimpan: header menampilkan **Belum tersimpan** dan tombol **Simpan** aktif setiap ada perubahan. Tidak ada autosave.
-- Tersimpan: setelah tombol **Simpan** ditekan, header menampilkan **Tersimpan** dengan jam.
-- Peringatan: saat membuat notulensi baru atau berpindah dokumen dengan perubahan yang belum disimpan, dialog menawarkan **Simpan**, **Buang**, atau **Batal**.
+- Belum tersimpan: header menampilkan **Belum tersimpan**. Draft baru belum masuk daftar sampai ada perubahan pertama.
+- Menyimpan: header menampilkan **Menyimpan...** selama jeda autosave.
+- Tersimpan: setelah autosave selesai, header menampilkan **Tersimpan** dengan jam.
 - Gagal: header menampilkan **Gagal menyimpan** atau **Penyimpanan nonaktif**, dengan pemberitahuan dan pilihan memulai penyimpanan baru.
 - Hapus: dialog konfirmasi bisa ditutup dengan Escape, dan penghapusan bisa diurungkan lewat pemberitahuan.
 

@@ -87,10 +87,11 @@ async function expectNoErrors(errors, label) {
   equal(errors.length, 0, `${label}: unexpected errors\n${errors.join("\n")}`);
 }
 
-function desktopSave(page) {
-  return page
-    .locator(".topbar")
-    .getByRole("button", { name: "Simpan", exact: true });
+function waitForStored(page, needle) {
+  return page.waitForFunction(
+    ({ key, needle }) => localStorage.getItem(key)?.includes(needle),
+    { key: STORAGE_KEY, needle },
+  );
 }
 
 function confirmDialog(page, name) {
@@ -125,14 +126,7 @@ async function fillSample(page) {
   await page.getByLabel("Tanggal tanda tangan").fill("2026-11-19");
   await page.getByLabel("Nama notulis").fill("Nama Notulis");
   await page.getByLabel("NIP/NPP").fill("19800101 200501 1 001");
-  await desktopSave(page).click();
-  await page.waitForFunction(
-    (key) => {
-      const raw = localStorage.getItem(key);
-      return raw?.includes("Nama Notulis") ?? false;
-    },
-    STORAGE_KEY,
-  );
+  await waitForStored(page, "Nama Notulis");
 }
 
 async function readPdf(path) {
@@ -156,12 +150,18 @@ const previewServer = await ensurePreviewServer();
 const browser = await chromium.launch({ executablePath: EDGE, headless: true });
 
 try {
-  console.log("1. Save, reload, unsaved warning, draft switch, delete, undo");
+  console.log("1. Autosave, reload, draft switch, delete, undo");
   {
     const context = await browser.newContext({
       viewport: { width: 1440, height: 1000 },
     });
     const { page, errors } = await openPage(context);
+
+    equal(
+      await page.getByRole("button", { name: "Simpan", exact: true }).count(),
+      0,
+      "autosave mode has no Save button",
+    );
 
     await page.getByRole("button", { name: "Kertas F4", exact: true }).click();
     await page.waitForTimeout(700);
@@ -172,77 +172,75 @@ try {
     equal(
       await page.evaluate((key) => localStorage.getItem(key), STORAGE_KEY),
       null,
-      "switching to F4 on a blank form does not store an empty draft",
+      "paper size change on a blank form does not store an empty draft",
     );
     equal(
       await page.locator(".sidebar .draft-item").count(),
       0,
       "no empty draft appears in sidebar after clicking F4",
     );
+    equal(
+      await page.locator(".save-status-full").innerText(),
+      "Belum tersimpan",
+      "blank form stays unsaved",
+    );
     await page.getByRole("button", { name: "Kertas A4", exact: true }).click();
 
-    await page.getByLabel("Nama kegiatan").fill("Uji simpan manual");
+    await page.getByLabel("Nama kegiatan").fill("Uji autosave");
+    await waitForStored(page, "Uji autosave");
     equal(
       await page.locator(".sidebar .draft-item").count(),
-      0,
-      "unsaved new draft is not listed",
+      1,
+      "autosaved draft appears in the sidebar",
     );
-    equal(
-      await page.evaluate((key) => localStorage.getItem(key), STORAGE_KEY),
-      null,
-      "unsaved new draft is not stored",
+    ok(
+      (await page.locator(".save-status-full").innerText()).startsWith(
+        "Tersimpan",
+      ),
+      "status shows saved after autosave",
     );
-    await desktopSave(page).click();
-    await page.waitForFunction(
-      (key) => localStorage.getItem(key)?.includes("Uji simpan manual"),
-      STORAGE_KEY,
-    );
+
     await page.reload({ waitUntil: "networkidle" });
     equal(
       await page.getByLabel("Nama kegiatan").inputValue(),
-      "Uji simpan manual",
-      "saved title survives reload",
+      "Uji autosave",
+      "autosaved title survives reload",
     );
 
     const stored = await page.evaluate(
       (key) => JSON.parse(localStorage.getItem(key)),
       STORAGE_KEY,
     );
-    equal(stored.drafts.length, 1, "one draft stored after first save");
+    equal(stored.drafts.length, 1, "one draft stored after autosave");
 
     await page
       .getByRole("button", { name: "Notulensi baru", exact: true })
       .click();
+    equal(
+      await page.getByLabel("Nama kegiatan").inputValue(),
+      "",
+      "new notulensi starts blank",
+    );
     await page.getByLabel("Nama kegiatan").fill("Draft kedua");
+    await waitForStored(page, "Draft kedua");
     equal(
       await page.locator(".sidebar .draft-item").count(),
-      1,
-      "second new draft stays out of the list before save",
+      2,
+      "second autosaved draft is listed",
     );
-    await desktopSave(page).click();
-    await page.waitForFunction(
-      (key) => {
-        const raw = localStorage.getItem(key);
-        return (
-          raw?.includes("Uji simpan manual") && raw.includes("Draft kedua")
-        );
-      },
-      STORAGE_KEY,
-    );
-    equal(await page.locator(".sidebar .draft-item").count(), 2, "two drafts listed");
 
     await page
-      .locator(".sidebar .draft-item", { hasText: "Uji simpan manual" })
+      .locator(".sidebar .draft-item", { hasText: "Uji autosave" })
       .locator(".draft-select")
       .click();
     equal(
       await page.getByLabel("Nama kegiatan").inputValue(),
-      "Uji simpan manual",
+      "Uji autosave",
       "selecting a draft loads its content",
     );
 
     await page
-      .locator(".sidebar .draft-item", { hasText: "Uji simpan manual" })
+      .locator(".sidebar .draft-item", { hasText: "Uji autosave" })
       .locator(".draft-delete")
       .click();
     await confirmDialog(page, "Hapus notulensi ini?").waitFor({
@@ -259,7 +257,7 @@ try {
     );
 
     await page
-      .locator(".sidebar .draft-item", { hasText: "Uji simpan manual" })
+      .locator(".sidebar .draft-item", { hasText: "Uji autosave" })
       .locator(".draft-delete")
       .click();
     await page
@@ -280,7 +278,7 @@ try {
     );
     equal(
       await page.getByLabel("Nama kegiatan").inputValue(),
-      "Uji simpan manual",
+      "Uji autosave",
       "undo restores the active draft content",
     );
     const afterUndo = await page.evaluate(
@@ -292,176 +290,91 @@ try {
     await page
       .getByRole("button", { name: "Notulensi baru", exact: true })
       .click();
-    await page.getByLabel("Nama kegiatan").fill("Belum disimpan");
-    equal(
-      await page.locator(".sidebar .draft-item").count(),
-      2,
-      "draft waiting for save is not listed",
-    );
+    await page.getByLabel("Nama kegiatan").fill("Draft ketiga");
     await page
       .getByRole("button", { name: "Notulensi baru", exact: true })
       .click();
-    await confirmDialog(page, "Simpan notulensi ini?").waitFor({
-      state: "visible",
-    });
-    ok(
-      await page.getByText(/belum disimpan ke daftar dokumen/).isVisible(),
-      "creating a new notulensi warns about the unsaved draft",
-    );
-    await confirmDialog(page, "Simpan notulensi ini?")
-      .getByRole("button", { name: "Buang", exact: true })
-      .click();
-    await confirmDialog(page, "Simpan notulensi ini?").waitFor({
-      state: "hidden",
-    });
+    await waitForStored(page, "Draft ketiga");
     equal(
       await page.getByLabel("Nama kegiatan").inputValue(),
       "",
-      "discard starts a blank notulensi",
-    );
-    equal(
-      await page.locator(".sidebar .draft-item").count(),
-      2,
-      "discarded draft is not listed",
-    );
-
-    await page.getByLabel("Nama kegiatan").fill("Draft ketiga");
-    await desktopSave(page).click();
-    await page.waitForFunction(
-      (key) => localStorage.getItem(key)?.includes("Draft ketiga"),
-      STORAGE_KEY,
+      "new notulensi flushes the previous autosave and starts blank",
     );
     equal(
       await page.locator(".sidebar .draft-item").count(),
       3,
-      "saved draft from the form is listed",
-    );
-
-    await page
-      .getByRole("button", { name: "Notulensi baru", exact: true })
-      .click();
-    await page.getByLabel("Nama kegiatan").fill("Draft keempat");
-    await page
-      .getByRole("button", { name: "Notulensi baru", exact: true })
-      .click();
-    await confirmDialog(page, "Simpan notulensi ini?").waitFor({
-      state: "visible",
-    });
-    await confirmDialog(page, "Simpan notulensi ini?")
-      .getByRole("button", { name: "Simpan", exact: true })
-      .click();
-    await confirmDialog(page, "Simpan notulensi ini?").waitFor({
-      state: "hidden",
-    });
-    equal(
-      await page.getByLabel("Nama kegiatan").inputValue(),
-      "",
-      "save then new starts a blank notulensi",
-    );
-    equal(
-      await page.locator(".sidebar .draft-item").count(),
-      4,
-      "draft saved from the warning is listed",
+      "draft flushed by the new action is listed",
     );
 
     await page.getByLabel("Nama kegiatan").fill("Pindah dokumen");
     await page
-      .locator(".sidebar .draft-item")
-      .first()
+      .locator(".sidebar .draft-item", { hasText: "Draft ketiga" })
       .locator(".draft-select")
       .click();
-    await confirmDialog(page, "Simpan notulensi ini?").waitFor({
-      state: "visible",
-    });
-    await confirmDialog(page, "Simpan notulensi ini?")
-      .getByRole("button", { name: "Batal", exact: true })
-      .click();
-    await confirmDialog(page, "Simpan notulensi ini?").waitFor({
-      state: "hidden",
-    });
+    await waitForStored(page, "Pindah dokumen");
     equal(
       await page.getByLabel("Nama kegiatan").inputValue(),
-      "Pindah dokumen",
-      "cancel keeps the unsaved draft open",
+      "Draft ketiga",
+      "switching flushes the previous draft and loads the selected one",
     );
-    await page
-      .locator(".sidebar .draft-item")
-      .first()
-      .locator(".draft-select")
-      .click();
-    await confirmDialog(page, "Simpan notulensi ini?").waitFor({
-      state: "visible",
-    });
-    await confirmDialog(page, "Simpan notulensi ini?")
-      .getByRole("button", { name: "Buang", exact: true })
-      .click();
-    await confirmDialog(page, "Simpan notulensi ini?").waitFor({
-      state: "hidden",
-    });
     equal(
-      await page.getByLabel("Nama kegiatan").inputValue(),
-      "Draft keempat",
-      "discard then open another saved draft",
+      await page.locator(".sidebar .draft-item").count(),
+      4,
+      "draft flushed by switching is listed",
     );
 
-    await page.getByLabel("Nama kegiatan").fill("Perubahan tertunda");
-    await page.waitForTimeout(700);
-    equal(
-      await page.evaluate(
-        (key) => localStorage.getItem(key)?.includes("Perubahan tertunda"),
-        STORAGE_KEY,
-      ),
-      false,
-      "editing a saved draft does not autosave",
-    );
+    await page.getByLabel("Nama kegiatan").fill("Perubahan autosave");
+    await waitForStored(page, "Perubahan autosave");
     equal(
       await page
-        .locator(".sidebar .draft-item", { hasText: "Perubahan tertunda" })
-        .count(),
-      0,
-      "sidebar keeps the saved title until Simpan",
-    );
-    await page
-      .getByRole("button", { name: "Notulensi baru", exact: true })
-      .click();
-    await confirmDialog(page, "Simpan notulensi ini?").waitFor({
-      state: "visible",
-    });
-    ok(
-      await page.getByText(/Perubahan pada .* belum disimpan/).isVisible(),
-      "editing a saved draft triggers the unsaved warning",
-    );
-    await confirmDialog(page, "Simpan notulensi ini?")
-      .getByRole("button", { name: "Batal", exact: true })
-      .click();
-    await confirmDialog(page, "Simpan notulensi ini?").waitFor({
-      state: "hidden",
-    });
-    await desktopSave(page).click();
-    await page.waitForFunction(
-      (key) => localStorage.getItem(key)?.includes("Perubahan tertunda"),
-      STORAGE_KEY,
-    );
-    equal(
-      await page
-        .locator(".sidebar .draft-item", { hasText: "Perubahan tertunda" })
+        .locator(".sidebar .draft-item", { hasText: "Perubahan autosave" })
         .count(),
       1,
-      "saved edit updates the sidebar title",
+      "editing a saved draft autosaves and updates the sidebar title",
     );
-    await page
-      .getByRole("button", { name: "Notulensi baru", exact: true })
-      .click();
-    await confirmDialog(page, "Simpan notulensi ini?").waitFor({
-      state: "hidden",
-    });
     equal(
-      await page.getByLabel("Nama kegiatan").inputValue(),
-      "",
-      "saved edit no longer blocks a new notulensi",
+      await page
+        .locator(".sidebar .draft-item", { hasText: "Draft ketiga" })
+        .count(),
+      0,
+      "old saved title is replaced after autosave",
+    );
+    ok(
+      (await page.locator(".save-status-full").innerText()).startsWith(
+        "Tersimpan",
+      ),
+      "status shows saved after editing a saved draft",
     );
 
-    await expectNoErrors(errors, "save and unsaved warning test");
+    await page.getByRole("button", { name: "Kertas F4", exact: true }).click();
+    await page.waitForFunction(
+      (key) => localStorage.getItem(key)?.includes('"paperSize":"F4"'),
+      STORAGE_KEY,
+    );
+    await page.reload({ waitUntil: "networkidle" });
+    equal(
+      await page
+        .getByRole("button", { name: "Kertas F4", exact: true })
+        .getAttribute("aria-pressed"),
+      "true",
+      "paper size on a saved draft autosaves and survives reload",
+    );
+
+    await page.getByLabel("Nama kegiatan").fill("Sebelum muat ulang");
+    await page.reload({ waitUntil: "networkidle" });
+    equal(
+      await page.getByLabel("Nama kegiatan").inputValue(),
+      "Sebelum muat ulang",
+      "unsaved change flushes before reload",
+    );
+
+    const finalStored = await page.evaluate(
+      (key) => JSON.parse(localStorage.getItem(key)),
+      STORAGE_KEY,
+    );
+    equal(finalStored.drafts.length, 4, "four drafts stored after autosave flows");
+
+    await expectNoErrors(errors, "autosave and draft test");
     await context.close();
   }
 
@@ -488,9 +401,10 @@ try {
       "storage status shows disabled while storage is unreadable",
     );
 
-    ok(
-      await desktopSave(page).isDisabled(),
-      "save is disabled while storage is unreadable",
+    equal(
+      await page.getByRole("button", { name: "Simpan", exact: true }).count(),
+      0,
+      "autosave mode has no Save button while storage is unreadable",
     );
     await page.getByLabel("Nama kegiatan").fill("Jangan timpa data rusak");
     await page.waitForTimeout(800);
@@ -527,16 +441,12 @@ try {
     );
 
     await page.getByLabel("Nama kegiatan").fill("Data baru");
-    await desktopSave(page).click();
-    await page.waitForFunction(
-      (key) => localStorage.getItem(key)?.includes("Data baru"),
-      STORAGE_KEY,
-    );
+    await waitForStored(page, "Data baru");
     await page.reload({ waitUntil: "networkidle" });
     equal(
       await page.getByLabel("Nama kegiatan").inputValue(),
       "Data baru",
-      "new storage accepts save after reset",
+      "new storage autosaves after reset",
     );
     equal(
       await page.locator(".storage-banner").count(),
@@ -566,11 +476,7 @@ try {
     const { page, errors } = await openPage(context);
 
     await page.getByLabel("Nama kegiatan").fill("Data awal");
-    await desktopSave(page).click();
-    await page.waitForFunction(
-      (key) => localStorage.getItem(key)?.includes("Data awal"),
-      STORAGE_KEY,
-    );
+    await waitForStored(page, "Data awal");
 
     await page.evaluate(() => {
       window.__originalSetItem = Storage.prototype.setItem;
@@ -579,7 +485,6 @@ try {
       };
     });
     await page.getByLabel("Nama kegiatan").fill("Data gagal");
-    await desktopSave(page).click();
     await page
       .getByText(/Penyimpanan peramban penuh atau tidak tersedia/)
       .waitFor();
@@ -600,11 +505,7 @@ try {
       Storage.prototype.setItem = window.__originalSetItem;
     });
     await page.getByLabel("Nama kegiatan").fill("Data pulih");
-    await desktopSave(page).click();
-    await page.waitForFunction(
-      (key) => localStorage.getItem(key)?.includes("Data pulih"),
-      STORAGE_KEY,
-    );
+    await waitForStored(page, "Data pulih");
     ok(
       (await page.locator(".save-status-full").innerText()).startsWith(
         "Tersimpan",
@@ -705,19 +606,7 @@ try {
       await page.locator(".preview-sheet .doc--f4").isVisible(),
       "preview switches to F4 sheet",
     );
-    equal(
-      await page.evaluate(
-        (key) => localStorage.getItem(key)?.includes('"paperSize":"F4"'),
-        STORAGE_KEY,
-      ),
-      false,
-      "F4 change is not saved before Simpan",
-    );
-    await desktopSave(page).click();
-    await page.waitForFunction(
-      (key) => localStorage.getItem(key)?.includes('"paperSize":"F4"'),
-      STORAGE_KEY,
-    );
+    await waitForStored(page, '"paperSize":"F4"');
     await page.reload({ waitUntil: "networkidle" });
     equal(
       await page
@@ -785,7 +674,6 @@ try {
     await page
       .getByLabel("Keterangan foto 1", { exact: true })
       .fill("Pembukaan rapat koordinasi");
-    await desktopSave(page).click();
     await page.waitForFunction(
       (key) => {
         const raw = localStorage.getItem(key);
@@ -927,24 +815,22 @@ try {
       0,
       "Unduh Word button is removed on mobile",
     );
-    const mobileSave = page
-      .locator(".mobile-actionbar")
-      .getByRole("button", { name: "Simpan", exact: true });
-    const saveBox = await mobileSave.boundingBox();
-    ok(saveBox && saveBox.height >= 44, "Simpan tap target is at least 44px");
-    ok(
-      await mobileSave.isDisabled(),
-      "Simpan is disabled before the first change",
-    );
-    await page.getByLabel("Nama kegiatan").fill("Uji ponsel");
-    ok(
-      await mobileSave.isEnabled(),
-      "Simpan is enabled after a change on mobile",
+    equal(
+      await page.getByRole("button", { name: "Simpan", exact: true }).count(),
+      0,
+      "autosave mode has no Save button on mobile",
     );
     const printBox = await page
       .getByRole("button", { name: "Cetak / PDF", exact: true })
       .boundingBox();
     ok(printBox && printBox.height >= 44, "Cetak / PDF tap target is at least 44px");
+    await page.getByLabel("Nama kegiatan").fill("Uji ponsel");
+    await waitForStored(page, "Uji ponsel");
+    equal(
+      await page.locator(".sidebar .draft-item").count(),
+      1,
+      "mobile autosave stores the draft",
+    );
     for (const name of ["Formulir", "Pratinjau"]) {
       const box = await page.getByRole("tab", { name }).boundingBox();
       ok(box && box.height >= 44, `${name} tab is at least 44px`);
@@ -993,6 +879,11 @@ try {
     ok(
       await page.locator(".draft-drawer").isVisible(),
       "mobile drawer opens",
+    );
+    equal(
+      await page.locator(".draft-drawer .draft-item").count(),
+      1,
+      "mobile drawer lists the autosaved draft",
     );
     await page.keyboard.press("Escape");
     await page.locator(".draft-drawer").waitFor({ state: "hidden" });

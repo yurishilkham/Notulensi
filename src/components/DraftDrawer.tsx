@@ -107,8 +107,8 @@ export function DraftDrawer({
         </div>
 
         <p className="sidebar-note">
-          Notulensi baru dan setiap perubahan masuk ke peramban setelah klik
-          Simpan.
+          Data tersimpan di peramban ini, bukan di server. Cetak atau simpan PDF
+          untuk arsip.
         </p>
       </div>
     </dialog>

@@ -98,27 +98,6 @@ export function CheckIcon({ size = 18, className }: IconProps) {
   );
 }
 
-export function SaveIcon({ size = 18, className }: IconProps) {
-  return (
-    <svg
-      className={className}
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M5 3h11l3 3v15H5z" />
-      <path d="M8 3v6h8V3" />
-      <path d="M8 14h8v7H8z" />
-    </svg>
-  );
-}
-
 export function ImageIcon({ size = 18, className }: IconProps) {
   return (
     <svg

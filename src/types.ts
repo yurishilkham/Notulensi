@@ -26,7 +26,7 @@ export type Notulensi = {
   nip: string;
 };
 
-export type SaveState = "idle" | "saved" | "error";
+export type SaveState = "idle" | "saving" | "saved" | "error";
 
 export type ToastTone = "success" | "error" | "info";
 

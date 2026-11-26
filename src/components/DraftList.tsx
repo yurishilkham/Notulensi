@@ -15,8 +15,7 @@ export function DraftList({ drafts, activeId, onSelect, onDelete }: Props) {
       <div className="draft-empty">
         <p className="draft-empty-title">Belum ada notulensi tersimpan.</p>
         <p className="draft-empty-copy">
-          Isi formulir, lalu klik Simpan untuk menambahkan notulensi ke daftar
-          di peramban ini.
+          Isi formulir. Setiap perubahan tersimpan otomatis di peramban ini.
         </p>
       </div>
     );

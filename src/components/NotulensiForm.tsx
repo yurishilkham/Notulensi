@@ -447,9 +447,8 @@ export function NotulensiForm({
       </Section>
 
       <p className="form-note">
-        Klik Simpan untuk menyimpan notulensi ini ke peramban. Notulensi baru
-        belum masuk daftar sebelum disimpan. Untuk arsip, cetak atau simpan
-        sebagai PDF.
+        Perubahan tersimpan otomatis di peramban ini. Untuk arsip, cetak atau
+        simpan sebagai PDF.
       </p>
     </div>
   );

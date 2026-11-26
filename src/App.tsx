@@ -3,7 +3,7 @@ import { AppHeader } from "./components/AppHeader";
 import { ConfirmDialog } from "./components/ConfirmDialog";
 import { DraftDrawer } from "./components/DraftDrawer";
 import { DraftList } from "./components/DraftList";
-import { PlusIcon, PrinterIcon, SaveIcon } from "./components/Icons";
+import { PlusIcon, PrinterIcon } from "./components/Icons";
 import { NotulensiDocument } from "./components/NotulensiDocument";
 import { NotulensiForm } from "./components/NotulensiForm";
 import { PreviewPane } from "./components/PreviewPane";
@@ -26,10 +26,6 @@ import type {
 } from "./types";
 
 type View = "form" | "preview";
-
-type PendingAction =
-  | { type: "new" }
-  | { type: "select"; draft: Notulensi };
 
 export default function App() {
   const [boot] = useState(() => {
@@ -55,8 +51,6 @@ export default function App() {
   );
   const [toast, setToast] = useState<ToastData | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Notulensi | null>(null);
-  const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
-  const [dirty, setDirty] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [view, setView] = useState<View>("form");
   const isNarrow = useMediaQuery("(max-width: 1179px)");
@@ -65,6 +59,7 @@ export default function App() {
   const draftRef = useRef(draft);
   const storageErrorRef = useRef(storageError);
   const dirtyRef = useRef(false);
+  const saveTimer = useRef<number | null>(null);
   const deletedRef = useRef<{
     draft: Notulensi;
     wasActive: boolean;
@@ -108,7 +103,6 @@ export default function App() {
         setLastSavedAt(nextDraft.updatedAt);
         setSaveState("saved");
         dirtyRef.current = false;
-        setDirty(false);
         return true;
       } catch {
         setSaveState("error");
@@ -124,26 +118,42 @@ export default function App() {
     [showToast],
   );
 
-  const handleChange = useCallback((patch: Partial<Notulensi>) => {
-    const next = { ...draftRef.current, ...patch, updatedAt: Date.now() };
-    draftRef.current = next;
-    setDraft(next);
-    const persisted = draftsRef.current.some((item) => item.id === next.id);
-    setActiveId(persisted ? next.id : null);
-    dirtyRef.current = true;
-    setDirty(true);
-    setSaveState(storageErrorRef.current ? "error" : "idle");
-  }, []);
+  const scheduleSave = useCallback(() => {
+    if (storageErrorRef.current) {
+      setSaveState("error");
+      return;
+    }
+    setSaveState("saving");
+    if (saveTimer.current !== null) {
+      window.clearTimeout(saveTimer.current);
+    }
+    saveTimer.current = window.setTimeout(() => {
+      saveTimer.current = null;
+      commit(draftRef.current);
+    }, 450);
+  }, [commit]);
 
-  const handleSave = useCallback((): boolean => {
-    const next = { ...draftRef.current, updatedAt: Date.now() };
-    draftRef.current = next;
-    setDraft(next);
-    if (!commit(next)) return false;
-    setActiveId(next.id);
-    showToast({ message: "Notulensi disimpan.", tone: "success" });
-    return true;
-  }, [commit, showToast]);
+  const handleChange = useCallback(
+    (patch: Partial<Notulensi>) => {
+      const next = { ...draftRef.current, ...patch, updatedAt: Date.now() };
+      draftRef.current = next;
+      setDraft(next);
+      setActiveId(next.id);
+      dirtyRef.current = true;
+      scheduleSave();
+    },
+    [scheduleSave],
+  );
+
+  const flush = useCallback(() => {
+    if (saveTimer.current !== null) {
+      window.clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+    }
+    if (dirtyRef.current) {
+      commit(draftRef.current);
+    }
+  }, [commit]);
 
   const loadDraft = useCallback((next: Notulensi) => {
     const fresh = draftsRef.current.find((item) => item.id === next.id) ?? next;
@@ -153,11 +163,8 @@ export default function App() {
     setLastSavedAt(fresh.updatedAt);
     setSaveState("saved");
     dirtyRef.current = false;
-    setDirty(false);
     setView("form");
   }, []);
-
-  const needsSavePrompt = useCallback(() => dirtyRef.current, []);
 
   const requestSelect = useCallback(
     (next: Notulensi) => {
@@ -165,13 +172,10 @@ export default function App() {
         setView("form");
         return;
       }
-      if (needsSavePrompt()) {
-        setPendingAction({ type: "select", draft: next });
-        return;
-      }
+      flush();
       loadDraft(next);
     },
-    [loadDraft, needsSavePrompt],
+    [flush, loadDraft],
   );
 
   const startNew = useCallback(() => {
@@ -182,34 +186,15 @@ export default function App() {
     setLastSavedAt(null);
     setSaveState("idle");
     dirtyRef.current = false;
-    setDirty(false);
     setView("form");
     window.scrollTo({ top: 0 });
     window.setTimeout(() => nameInputRef.current?.focus(), 60);
   }, []);
 
   const requestNew = useCallback(() => {
-    if (needsSavePrompt()) {
-      setPendingAction({ type: "new" });
-      return;
-    }
+    flush();
     startNew();
-  }, [needsSavePrompt, startNew]);
-
-  const resolvePending = useCallback(
-    (mode: "save" | "discard") => {
-      const action = pendingAction;
-      if (!action) return;
-      if (mode === "save" && !handleSave()) return;
-      setPendingAction(null);
-      if (action.type === "new") {
-        startNew();
-        return;
-      }
-      loadDraft(action.draft);
-    },
-    [pendingAction, handleSave, startNew, loadDraft],
-  );
+  }, [flush, startNew]);
 
   const undoDelete = useCallback(() => {
     const deleted = deletedRef.current;
@@ -238,7 +223,6 @@ export default function App() {
       setLastSavedAt(deleted.draft.updatedAt);
       setSaveState("saved");
       dirtyRef.current = false;
-      setDirty(false);
       setView("form");
     }
 
@@ -248,6 +232,10 @@ export default function App() {
   const handleDelete = useCallback(
     (target: Notulensi) => {
       const wasActive = target.id === draftRef.current.id;
+      if (wasActive && saveTimer.current !== null) {
+        window.clearTimeout(saveTimer.current);
+        saveTimer.current = null;
+      }
       const remaining = draftsRef.current.filter(
         (item) => item.id !== target.id,
       );
@@ -276,7 +264,6 @@ export default function App() {
         setLastSavedAt(remaining[0] ? next.updatedAt : null);
         setSaveState(remaining[0] ? "saved" : "idle");
         dirtyRef.current = false;
-        setDirty(false);
         setView("form");
       }
 
@@ -293,18 +280,29 @@ export default function App() {
   );
 
   const handlePrint = useCallback(() => {
+    flush();
     window.print();
-  }, []);
+  }, [flush]);
 
   const handlePaperSizeChange = useCallback(
     (paperSize: PaperSize) => {
       if (draftRef.current.paperSize === paperSize) return;
-      handleChange({ paperSize });
+      const next = { ...draftRef.current, paperSize, updatedAt: Date.now() };
+      draftRef.current = next;
+      setDraft(next);
+      if (draftsRef.current.some((item) => item.id === next.id)) {
+        dirtyRef.current = true;
+        scheduleSave();
+      }
     },
-    [handleChange],
+    [scheduleSave],
   );
 
   const handleStartFresh = useCallback(() => {
+    if (saveTimer.current !== null) {
+      window.clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+    }
     try {
       startFreshStorage();
       const blank = createBlankNotulensi();
@@ -318,8 +316,6 @@ export default function App() {
       setStorageError(false);
       storageErrorRef.current = false;
       dirtyRef.current = false;
-      setDirty(false);
-      setPendingAction(null);
       setPendingDelete(null);
       setView("form");
       showToast({
@@ -348,30 +344,20 @@ export default function App() {
   }, [draft.namaKegiatan]);
 
   useEffect(() => {
-    const onBeforeUnload = (event: BeforeUnloadEvent) => {
-      if (!dirtyRef.current) return;
-      event.preventDefault();
-      event.returnValue = "";
+    const onBeforeUnload = () => flush();
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") flush();
     };
     window.addEventListener("beforeunload", onBeforeUnload);
-    return () => window.removeEventListener("beforeunload", onBeforeUnload);
-  }, []);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("beforeunload", onBeforeUnload);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [flush]);
 
   const deleteTitle =
     pendingDelete?.namaKegiatan.trim() || "Notulensi tanpa judul";
-  const pendingTitle = draft.namaKegiatan.trim() || "Notulensi tanpa judul";
-  const currentIsPersisted = drafts.some((item) => item.id === draft.id);
-  const unsavedLabel = currentIsPersisted
-    ? `Perubahan pada "${pendingTitle}" belum disimpan.`
-    : `"${pendingTitle}" belum disimpan ke daftar dokumen.`;
-  const pendingDescription = pendingAction
-    ? `${unsavedLabel} Simpan dulu sebelum ${
-        pendingAction.type === "new"
-          ? "membuat notulensi baru"
-          : "membuka notulensi lain"
-      }?`
-    : "";
-  const canSave = !storageError && dirty;
   const paper = paperFor(draft.paperSize);
 
   return (
@@ -383,8 +369,6 @@ export default function App() {
           lastSavedAt={lastSavedAt}
           storageDisabled={storageError}
           draftCount={drafts.length}
-          canSave={canSave}
-          onSave={handleSave}
           onPrint={handlePrint}
           onOpenDrafts={() => setDrawerOpen(true)}
           onNew={requestNew}
@@ -464,7 +448,7 @@ export default function App() {
             <p className="sidebar-note">
               {storageError
                 ? "Penyimpanan tidak tersedia. Cetak atau simpan PDF untuk menyimpan hasil."
-                : "Notulensi baru dan setiap perubahan masuk ke peramban setelah klik Simpan."}
+                : "Data tersimpan di peramban ini, bukan di server. Cetak atau simpan PDF untuk arsip."}
             </p>
           </aside>
 
@@ -503,15 +487,6 @@ export default function App() {
         >
           <button
             type="button"
-            className="btn btn-secondary"
-            onClick={handleSave}
-            disabled={!canSave}
-          >
-            <SaveIcon />
-            Simpan
-          </button>
-          <button
-            type="button"
             className="btn btn-primary"
             onClick={handlePrint}
           >
@@ -547,19 +522,6 @@ export default function App() {
           if (pendingDelete) handleDelete(pendingDelete);
         }}
         onClose={() => setPendingDelete(null)}
-      />
-
-      <ConfirmDialog
-        open={pendingAction !== null}
-        title="Simpan notulensi ini?"
-        description={pendingDescription}
-        confirmLabel="Simpan"
-        secondaryLabel="Buang"
-        confirmVariant="primary"
-        autoFocus="confirm"
-        onConfirm={() => resolvePending("save")}
-        onSecondary={() => resolvePending("discard")}
-        onClose={() => setPendingAction(null)}
       />
     </>
   );
