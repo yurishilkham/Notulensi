@@ -1,0 +1,28 @@
+{
+  "name": "notulensi-bawaslu",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "verify": "npm run build && node scripts/verify.mjs"
+  },
+  "dependencies": {
+    "@fontsource-variable/public-sans": "^5.3.0",
+    "@fontsource-variable/source-serif-4": "^5.3.1",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.3.0",
+    "pdf-to-png-converter": "^4.3.0",
+    "playwright-core": "^1.65.0",
+    "typescript": "^5.9.3",
+    "vite": "^8.3.8",
+    "vite-plugin-singlefile": "^2.3.4"
+  }
+}

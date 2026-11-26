@@ -1,0 +1,12 @@
+node_modules/
+dist/
+shots/
+.wrangler/
+.env
+.env.*
+!.env.example
+*.local
+*.log
+*.tsbuildinfo
+.DS_Store
+Thumbs.db
